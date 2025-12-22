@@ -17,9 +17,7 @@ export async function run(direction: 'up' | 'down' = 'up'): Promise<void> {
   const migrationsDir = path.join(__dirname, '../migrations');
 
   try {
-    // Load all script files in the migrations directory
-    const files = await readdir(migrationsDir);
-    const migrationsModules: Record<
+    let migrationsModules: Record<
       string,
       {
         up: (next?: MigrationCallback) => void;
@@ -27,16 +25,27 @@ export async function run(direction: 'up' | 'down' = 'up'): Promise<void> {
       }
     > = {};
 
-    for (const f of files
-      .filter(f => f.endsWith('.js') || f.endsWith('.ts'))
-      .sort()) {
-      migrationsModules[f] = await import(path.join(migrationsDir, f));
+    // Load all script files in the migrations directory
+    if (!process.env.SST) {
+      const files = await readdir(migrationsDir);
+
+      for (const f of files
+        .filter(f => f.endsWith('.js') || f.endsWith('.ts'))
+        .sort()) {
+        migrationsModules[f] = await import(path.join(migrationsDir, f));
+      }
+    } else {
+      // SST bundles this automatically. This won't always exist as a result
+      // eslint-disable-next-line import/no-unresolved
+      migrationsModules = (await import('../migrations.generated.js')).default;
     }
 
     return new Promise<void>((resolve, reject) => {
       load(
         {
-          stateStore: `${path.join(config.get('dataDir'), '.migrate')}${config.get('mode') === 'test' ? '-test' : ''}`,
+          stateStore: `${path.join(config.get('dataDir'), '.migrate')}${
+            config.get('mode') === 'test' ? '-test' : ''
+          }`,
           migrations: migrationsModules,
         },
         (err, set) => {

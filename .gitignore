@@ -79,3 +79,8 @@ build/
 
 *storybook.log
 storybook-static
+
+# sst
+.sst
+banks.generated.js
+migrations.generated.js

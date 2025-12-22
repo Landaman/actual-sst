@@ -61,8 +61,12 @@
     "jq": "./node_modules/node-jq/bin/jq",
     "prepare": "husky"
   },
+  "dependencies": {
+    "sst": "3.17.24"
+  },
   "devDependencies": {
     "@octokit/rest": "^22.0.1",
+    "@types/aws-lambda": "8.10.159",
     "@types/node": "^22.19.10",
     "@types/prompts": "^2.4.9",
     "baseline-browser-mapping": "^2.9.19",
