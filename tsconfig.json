@@ -34,7 +34,7 @@
     // Until/if we build using tsc
     "noEmit": true
   },
-  "include": ["bin/*.mts"],
+  "include": ["bin/*.mts", "sst.config.ts", "vpc-ipv6.ts"],
   "exclude": [
     "**/.*/",
     "node_modules",
