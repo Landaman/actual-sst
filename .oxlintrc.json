@@ -468,6 +468,19 @@
         "typescript/no-unsafe-unary-minus": "error",
         "typescript/no-unsafe-type-assertion": "error"
       }
+    },
+    {
+      "files": ["sst.config.ts", "vpc-ipv6.ts"],
+      "globals": {
+        "$app": "readonly",
+        "$asset": "readonly",
+        "$config": "readonly",
+        "$dev": "readonly",
+        "$util": "readonly",
+        "sst": "readonly",
+        "aws": "readonly",
+        "awsnative": "readonly"
+      }
     }
   ]
 }

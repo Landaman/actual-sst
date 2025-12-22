@@ -28,6 +28,7 @@
   "include": [
     "src/**/*",
     "migrations/**/*",
+    "lambda/**/*",
     "types/**/*",
     "app.ts",
     "bin/**/*"

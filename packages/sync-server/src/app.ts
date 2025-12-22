@@ -2,11 +2,8 @@ import fs, { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import cors from 'cors';
 import express from 'express';
-import rateLimit from 'express-rate-limit';
 
-import { bootstrap } from './account-db';
 import * as accountApp from './app-account';
 import * as adminApp from './app-admin';
 import * as akahuApp from './app-akahu/app-akahu.js';
@@ -18,43 +15,15 @@ import * as pluggai from './app-pluggyai/app-pluggyai';
 import * as secretApp from './app-secrets';
 import * as simpleFinApp from './app-simplefin/app-simplefin';
 import * as syncApp from './app-sync';
+import { setupApp, setupOpenId } from './common';
 import { config } from './load-config';
 
 const app = express();
+setupApp(app);
 
 process.on('unhandledRejection', reason => {
   console.log('Rejection:', reason);
 });
-
-app.disable('x-powered-by');
-app.use(cors());
-app.set('trust proxy', config.get('trustedProxies'));
-if (process.env.NODE_ENV !== 'development') {
-  app.use(
-    rateLimit({
-      windowMs: 60 * 1000,
-      max: 500,
-      legacyHeaders: false,
-      standardHeaders: true,
-    }),
-  );
-}
-
-app.use(express.json({ limit: `${config.get('upload.fileSizeLimitMB')}mb` }));
-
-app.use(
-  express.raw({
-    type: 'application/actual-sync',
-    limit: `${config.get('upload.fileSizeSyncLimitMB')}mb`,
-  }),
-);
-
-app.use(
-  express.raw({
-    type: 'application/encrypted-file',
-    limit: `${config.get('upload.syncEncryptedFileSizeLimitMB')}mb`,
-  }),
-);
 
 app.use('/sync', syncApp.handlers);
 app.use('/account', accountApp.handlers);
@@ -128,53 +97,55 @@ app.get('/metrics', (_req, res) => {
   });
 });
 
-// The web frontend.
-// Dev mode proxies to Vite, which injects inline preamble scripts and uses
-// a websocket for HMR. Loosen script-src and connect-src accordingly.
-// `'unsafe-eval'` is required at runtime for the Electron app, so it is
-// kept in both branches.
-const isDev = process.env.NODE_ENV === 'development';
-const scriptSrc = isDev
-  ? "'self' 'unsafe-inline' 'unsafe-eval' blob:"
-  : "'self' 'unsafe-eval' blob:";
-const connectSrc = isDev ? "'self' ws: wss: http: https:" : 'http: https:';
-const csp = [
-  "default-src 'self' blob:",
-  "img-src 'self' blob: data:",
-  `script-src ${scriptSrc}`,
-  "style-src 'self' 'unsafe-inline'",
-  "font-src 'self' data:",
-  `connect-src ${connectSrc}`,
-].join('; ');
+if (!process.env.SST) {
+  // The web frontend.
+  // Dev mode proxies to Vite, which injects inline preamble scripts and uses
+  // a websocket for HMR. Loosen script-src and connect-src accordingly.
+  // `'unsafe-eval'` is required at runtime for the Electron app, so it is
+  // kept in both branches.
+  const isDev = process.env.NODE_ENV === 'development';
+  const scriptSrc = isDev
+    ? "'self' 'unsafe-inline' 'unsafe-eval' blob:"
+    : "'self' 'unsafe-eval' blob:";
+  const connectSrc = isDev ? "'self' ws: wss: http: https:" : 'http: https:';
+  const csp = [
+    "default-src 'self' blob:",
+    "img-src 'self' blob: data:",
+    `script-src ${scriptSrc}`,
+    "style-src 'self' 'unsafe-inline'",
+    "font-src 'self' data:",
+    `connect-src ${connectSrc}`,
+  ].join('; ');
 
-app.use((req, res, next) => {
-  res.set('Cross-Origin-Opener-Policy', 'same-origin');
-  res.set('Cross-Origin-Embedder-Policy', 'require-corp');
-  res.set('Content-Security-Policy', csp);
-  next();
-});
-if (isDev) {
-  console.log(
-    'Running in development mode - Proxying frontend routes to React Dev Server',
-  );
+  app.use((req, res, next) => {
+    res.set('Cross-Origin-Opener-Policy', 'same-origin');
+    res.set('Cross-Origin-Embedder-Policy', 'require-corp');
+    res.set('Content-Security-Policy', csp);
+    next();
+  });
+  if (isDev) {
+    console.log(
+      'Running in development mode - Proxying frontend routes to React Dev Server',
+    );
 
-  // Imported within Dev block to allow dev dependency in package.json (reduces package size in production)
-  const httpProxyMiddleware = await import('http-proxy-middleware');
+    // Imported within Dev block to allow dev dependency in package.json (reduces package size in production)
+    const httpProxyMiddleware = await import('http-proxy-middleware');
 
-  app.use(
-    httpProxyMiddleware.createProxyMiddleware({
-      target: 'http://localhost:3001',
-      changeOrigin: true,
-      ws: true,
-    }),
-  );
-} else {
-  console.log('Running in production mode - Serving static React app');
+    app.use(
+      httpProxyMiddleware.createProxyMiddleware({
+        target: 'http://localhost:3001',
+        changeOrigin: true,
+        ws: true,
+      }),
+    );
+  } else {
+    console.log('Running in production mode - Serving static React app');
 
-  app.use(express.static(config.get('webRoot'), { index: false }));
-  app.get('/{*splat}', (req, res) =>
-    res.sendFile('index.html', { root: config.get('webRoot') }),
-  );
+    app.use(express.static(config.get('webRoot'), { index: false }));
+    app.get('/{*splat}', (req, res) =>
+      res.sendFile('index.html', { root: config.get('webRoot') }),
+    );
+  }
 }
 
 function parseHTTPSConfig(value: string) {
@@ -197,25 +168,10 @@ function sendServerStartedMessage() {
 export async function run() {
   const portVal = config.get('port');
   const port = typeof portVal === 'string' ? parseInt(portVal) : portVal;
-  const hostname = config.get('hostname');
-  const openIdConfig = config?.getProperties()?.openId;
-  if (
-    openIdConfig?.discoveryURL ||
-    openIdConfig?.issuer?.authorization_endpoint
-  ) {
-    console.log('OpenID configuration found. Preparing server to use it');
-    try {
-      const result = await bootstrap({ openId: openIdConfig }, true);
-      if ('error' in result && result.error) {
-        console.log(result.error);
-      } else {
-        console.log('OpenID configured!');
-      }
-    } catch (err) {
-      console.error(err);
-    }
-  }
 
+  await setupOpenId();
+
+  const hostname = config.get('hostname');
   if (config.get('https.key') && config.get('https.cert')) {
     const https = await import('node:https');
     const httpsOptions = {

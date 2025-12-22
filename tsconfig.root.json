@@ -1,5 +1,5 @@
 {
   "extends": "./tsconfig.json",
-  "include": ["bin/*.mts"],
+  "include": ["bin/*.mts", "sst.config.ts", "vpc-ipv6.ts"],
   "exclude": ["node_modules"]
 }
