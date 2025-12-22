@@ -2,11 +2,8 @@ import fs, { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import cors from 'cors';
 import express from 'express';
-import rateLimit from 'express-rate-limit';
 
-import { bootstrap } from './account-db';
 import * as accountApp from './app-account';
 import * as adminApp from './app-admin';
 import * as corsApp from './app-cors-proxy';
@@ -17,42 +14,14 @@ import * as secretApp from './app-secrets';
 import * as simpleFinApp from './app-simplefin/app-simplefin';
 import * as syncApp from './app-sync';
 import { config } from './load-config';
+import { setupApp, setupOpenId } from './common';
 
 const app = express();
+setupApp(app);
 
 process.on('unhandledRejection', reason => {
   console.log('Rejection:', reason);
 });
-
-app.disable('x-powered-by');
-app.use(cors());
-app.set('trust proxy', config.get('trustedProxies'));
-if (process.env.NODE_ENV !== 'development') {
-  app.use(
-    rateLimit({
-      windowMs: 60 * 1000,
-      max: 500,
-      legacyHeaders: false,
-      standardHeaders: true,
-    }),
-  );
-}
-
-app.use(express.json({ limit: `${config.get('upload.fileSizeLimitMB')}mb` }));
-
-app.use(
-  express.raw({
-    type: 'application/actual-sync',
-    limit: `${config.get('upload.fileSizeSyncLimitMB')}mb`,
-  }),
-);
-
-app.use(
-  express.raw({
-    type: 'application/encrypted-file',
-    limit: `${config.get('upload.syncEncryptedFileSizeLimitMB')}mb`,
-  }),
-);
 
 app.use('/sync', syncApp.handlers);
 app.use('/account', accountApp.handlers);
@@ -124,34 +93,36 @@ app.get('/metrics', (_req, res) => {
   });
 });
 
-// The web frontend
-app.use((req, res, next) => {
-  res.set('Cross-Origin-Opener-Policy', 'same-origin');
-  res.set('Cross-Origin-Embedder-Policy', 'require-corp');
-  next();
-});
-if (process.env.NODE_ENV === 'development') {
-  console.log(
-    'Running in development mode - Proxying frontend routes to React Dev Server',
-  );
+if (!process.env.SST) {
+  // The web frontend
+  app.use((req, res, next) => {
+    res.set('Cross-Origin-Opener-Policy', 'same-origin');
+    res.set('Cross-Origin-Embedder-Policy', 'require-corp');
+    next();
+  });
+  if (process.env.NODE_ENV === 'development') {
+    console.log(
+      'Running in development mode - Proxying frontend routes to React Dev Server',
+    );
 
-  // Imported within Dev block to allow dev dependency in package.json (reduces package size in production)
-  const httpProxyMiddleware = await import('http-proxy-middleware');
+    // Imported within Dev block to allow dev dependency in package.json (reduces package size in production)
+    const httpProxyMiddleware = await import('http-proxy-middleware');
 
-  app.use(
-    httpProxyMiddleware.createProxyMiddleware({
-      target: 'http://localhost:3001',
-      changeOrigin: true,
-      ws: true,
-    }),
-  );
-} else {
-  console.log('Running in production mode - Serving static React app');
+    app.use(
+      httpProxyMiddleware.createProxyMiddleware({
+        target: 'http://localhost:3001',
+        changeOrigin: true,
+        ws: true,
+      }),
+    );
+  } else {
+    console.log('Running in production mode - Serving static React app');
 
-  app.use(express.static(config.get('webRoot'), { index: false }));
-  app.get('/{*splat}', (req, res) =>
-    res.sendFile('index.html', { root: config.get('webRoot') }),
-  );
+    app.use(express.static(config.get('webRoot'), { index: false }));
+    app.get('/{*splat}', (req, res) =>
+      res.sendFile('index.html', { root: config.get('webRoot') }),
+    );
+  }
 }
 
 function parseHTTPSConfig(value: string) {
@@ -173,25 +144,10 @@ function sendServerStartedMessage() {
 export async function run() {
   const portVal = config.get('port');
   const port = typeof portVal === 'string' ? parseInt(portVal) : portVal;
-  const hostname = config.get('hostname');
-  const openIdConfig = config?.getProperties()?.openId;
-  if (
-    openIdConfig?.discoveryURL ||
-    openIdConfig?.issuer?.authorization_endpoint
-  ) {
-    console.log('OpenID configuration found. Preparing server to use it');
-    try {
-      const { error } = await bootstrap({ openId: openIdConfig }, true);
-      if (error) {
-        console.log(error);
-      } else {
-        console.log('OpenID configured!');
-      }
-    } catch (err) {
-      console.error(err);
-    }
-  }
 
+  await setupOpenId();
+
+  const hostname = config.get('hostname');
   if (config.get('https.key') && config.get('https.cert')) {
     const https = await import('node:https');
     const httpsOptions = {

@@ -148,6 +148,24 @@ export default defineConfig(async ({ mode }) => {
       watch: {
         disableGlobbing: false,
       },
+      // Proxy if vite is running from sst
+      proxy: process.env.SST_API_URL
+        ? {
+            '/sync': process.env.SST_API_URL,
+            '/account': process.env.SST_API_URL,
+            '/gocardless': process.env.SST_API_URL,
+            '/simplefin': process.env.SST_API_URL,
+            '/pluggyai': process.env.SST_API_URL,
+            '/admin': process.env.SST_API_URL,
+            '/openid': process.env.SST_API_URL,
+            '/secret': process.env.SST_API_URL,
+            '/cors-proxy': process.env.SST_API_URL,
+            '/mode': process.env.SST_API_URL,
+            '/info': process.env.SST_API_URL,
+            '/health': process.env.SST_API_URL,
+            '/metrics': process.env.SST_API_URL,
+          }
+        : undefined,
     },
     resolve: {
       extensions: resolveExtensions,

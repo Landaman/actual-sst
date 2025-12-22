@@ -8,6 +8,12 @@ const dirname = path.resolve(fileURLToPath(import.meta.url), '..');
 const banksDir = path.resolve(dirname, 'banks');
 
 async function loadBanks() {
+  if (process.env.SST) {
+    // For SST only, we build this dynamically at build time, so this won't always exist
+    // eslint-disable-next-line import/no-unresolved
+    return (await import('./banks.generated.js')).default;
+  }
+
   const bankHandlers = fs
     .readdirSync(banksDir)
     .filter(filename => filename.includes('_') && filename.endsWith('.js'));

@@ -18,7 +18,14 @@ export function run(direction = 'up') {
         stateStore: `${path.join(config.get('dataDir'), '.migrate')}${
           config.get('mode') === 'test' ? '-test' : ''
         }`,
-        migrationsDirectory: path.join(__dirname, '../migrations'),
+        migrationsDirectory: process.env.SST
+          ? undefined
+          : path.join(__dirname, '../migrations'),
+        // SST bundles this automatically. This won't always exist as a result
+        // eslint-disable-next-line import/no-unresolved
+        migrations: process.env.SST
+          ? require('../migrations.generated.js').default
+          : undefined,
       },
       (err, set) => {
         if (err) {

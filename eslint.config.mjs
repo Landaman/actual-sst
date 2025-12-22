@@ -33,6 +33,9 @@ export default defineConfig(
       '**/build/',
       '**/dist/',
       '**/node_modules/',
+      './.sst/*',
+      'packages/sync-server/src/app-gocardless/banks.generated.js',
+      'packages/sync-server/migrations.generated.js',
     ],
   },
   {

@@ -44,7 +44,7 @@
       },
     ],
   },
-  "include": ["packages/**/*", "bin/*.ts"],
+  "include": ["packages/**/*", "bin/*.ts", "sst.config.ts", "vpc-ipv6.ts"],
   "exclude": [
     "**/.*/",
     "node_modules",

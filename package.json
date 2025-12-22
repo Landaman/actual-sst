@@ -54,13 +54,13 @@
     "rebuild-node": "yarn workspace loot-core rebuild",
     "lint": "oxfmt --check . && oxlint --deny-warnings && eslint . --max-warnings 0",
     "lint:fix": "oxfmt . && oxlint --deny-warnings --fix && eslint . --max-warnings 0 --fix",
-    "install:server": "yarn workspaces focus @actual-app/sync-server --production",
     "typecheck": "yarn tsc --incremental && tsc-strict",
     "jq": "./node_modules/node-jq/bin/jq",
     "prepare": "husky"
   },
   "devDependencies": {
     "@octokit/rest": "^22.0.1",
+    "@types/aws-lambda": "8.10.159",
     "@types/node": "^22.19.1",
     "@types/prompts": "^2.4.9",
     "cross-env": "^10.1.0",
@@ -107,5 +107,8 @@
   "browserslist": [
     "electron >= 35.0",
     "defaults"
-  ]
+  ],
+  "dependencies": {
+    "sst": "3.17.24"
+  }
 }
